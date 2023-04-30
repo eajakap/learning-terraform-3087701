@@ -31,18 +31,22 @@ module "blog_vpc" {
   }
 }
 
-resource "aws_instance" "blog" {
-  ami           = data.aws_ami.app_ami.id
-  instance_type = var.instance_type
+module "blog_autoscaling" {
+  source  = "terraform-aws-modules/autoscaling/aws"
+  version = "6.5.2"
 
-  vpc_security_group_ids = [ module.blog_sg.security_group_id]
+  name = "blog"
 
-  tags = {
-    Name = "Learning Terraform"
-  }
+  min_size            = 1
+  max_size            = 2
+  vpc_zone_identifier = module.blog_vpc.public_subnets
+  target_group_arns   = module.blog_alb.target_group_arns
+  security_groups     = [module.blog_sg.security_group_id]
+  instance_type       = var.instance_type
+  image_id            = data.aws_ami.app_ami.id
 }
 
-module "alb" {
+module "blog_alb" {
   source  = "terraform-aws-modules/alb/aws"
   version = "~> 8.0"
 
@@ -60,12 +64,6 @@ module "alb" {
       backend_protocol = "HTTP"
       backend_port     = 80
       target_type      = "instance"
-      targets = {
-        my_target = {
-          target_id = aws_instance.blog.id
-          port = 80
-        }
-      }
     }
   ]
 
@@ -96,3 +94,16 @@ module "blog_sg" {
   egress_cidr_blocks = ["0.0.0.0/0"]
 
 }
+
+resource "aws_instance" "blog" {
+  ami                    = data.aws_ami.app_ami.id
+  instance_type          = var.instance_type
+  subnet_id              = module.blog_vpc.public_subnets[0]
+  vpc_security_group_ids = [module.blog_sg.security_group_id]
+
+  tags = {
+    Name = "Learning Terraform"
+  }
+}
+
+
